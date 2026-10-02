@@ -1,0 +1,59 @@
+name: Build K2P Padavan Firmware
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - custom-k2p
+    paths:
+      - '.github/workflows/build-k2p.yml'
+      - 'trunk/configs/templates/K2P.config'
+
+jobs:
+  build:
+    name: Build K2P Firmware
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip libtool-bin curl cmake gperf gawk flex bison nano xxd \
+            fakeroot kmod cpio git python3-docutils gettext automake autopoint \
+            texinfo build-essential help2man pkg-config zlib1g-dev libgmp3-dev \
+            libmpc-dev libmpfr-dev libncurses5-dev libltdl-dev wget libc-dev-bin
+
+      - name: Download and prepare toolchain
+        run: |
+          cd toolchain-mipsel
+          chmod +x dl_toolchain.sh
+          ./dl_toolchain.sh
+
+      - name: Build K2P firmware
+        run: |
+          cd trunk
+          chmod +x clear_tree build_firmware_modify
+          ./clear_tree
+          fakeroot ./build_firmware_modify K2P
+
+      - name: Organize output files
+        id: organize
+        run: |
+          mkdir -p dist
+          cp -f trunk/images/*.trx dist/
+          cd dist
+          echo "Generated firmware files:"
+          ls -lh
+          echo "TIMESTAMP=$(date +'%Y%m%d_%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: K2P-Padavan-Firmware-${{ steps.organize.outputs.TIMESTAMP }}
+          path: dist/*.trx
+          if-no-files-found: error
